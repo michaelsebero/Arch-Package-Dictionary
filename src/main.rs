@@ -1,34 +1,26 @@
-use std::io::{self, Write};
+use std::io::Write;
 use std::process::{Command, Stdio};
+use std::env;
+
+// ANSI color codes as constants
+const BOLD: &str = "\x1B[1m";
+const BLUE: &str = "\x1B[34m";
+const RED: &str = "\x1B[31m";
+const GREEN: &str = "\x1B[32m";
+const RESET: &str = "\x1B[0m";
 
 fn main() {
-    loop {
-        clear_screen();
-        print!("Enter a search term (or 'q' to quit): ");
-        io::stdout().flush().unwrap();
-
-        let input = read_input();
-        if input.to_lowercase() == "q" {
-            break;
-        }
-
-        let results = search_packages(&input);
-        print_results_with_pager(&results);
-    }
-}
-
-fn clear_screen() {
-    print!("\x1B[2J\x1B[1;1H");
-    io::stdout().flush().unwrap();
-}
-
-fn read_input() -> String {
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap_or_else(|_| {
-        eprintln!("Error reading input");
+    let args: Vec<String> = env::args().collect();
+    
+    if args.len() < 2 {
+        eprintln!("Usage: pd <search-term>");
         std::process::exit(1);
-    });
-    input.trim().to_string()
+    }
+
+    // Use all arguments after the program name as the search term
+    let search_term = args[1..].join(" ");
+    let results = search_packages(&search_term);
+    print_results_with_pager(&results);
 }
 
 fn search_packages(term: &str) -> (Vec<(String, String)>, Vec<(String, String)>, Vec<(String, String)>) {
@@ -108,14 +100,7 @@ fn execute_search_command(command: &str, args: &[&str]) -> Vec<(String, String)>
 
 fn print_results_with_pager(results: &(Vec<(String, String)>, Vec<(String, String)>, Vec<(String, String)>)) {
     let (pacman, aur, flatpak) = results;
-
-    // ANSI escape codes for text formatting
-    const BOLD: &str = "\x1B[1m";
-    const RESET: &str = "\x1B[0m";
-    const BLUE: &str = "\x1B[34m";
-    const RED: &str = "\x1B[31m";
-    const GREEN: &str = "\x1B[32m";
-
+    
     let mut output = String::new();
     
     fn format_package_count(count: usize) -> String {
