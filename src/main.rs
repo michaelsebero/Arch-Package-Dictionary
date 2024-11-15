@@ -1,6 +1,8 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::env;
+use tokio::runtime::Runtime;
+use futures::future::join_all;
 
 // ANSI color codes as constants
 const BOLD: &str = "\x1B[1m";
@@ -17,35 +19,66 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Use all arguments after the program name as the search term
     let search_term = args[1..].join(" ");
-    let results = search_packages(&search_term);
+    
+    // Create a tokio runtime for async operations
+    let rt = Runtime::new().expect("Failed to create runtime");
+    let results = rt.block_on(search_packages(&search_term));
     print_results_with_pager(&results);
 }
 
-fn search_packages(term: &str) -> (Vec<(String, String)>, Vec<(String, String)>, Vec<(String, String)>) {
-    (
-        search_pacman(term),
-        search_aur(term),
-        search_flatpak(term),
-    )
+async fn search_packages(term: &str) -> (Vec<(String, String)>, Vec<(String, String)>, Vec<(String, String)>) {
+    // Clone the term once for each async task
+    let term_pacman = term.to_string();
+    let term_aur = term.to_string();
+    let term_flatpak = term.to_string();
+    
+    // Create three async tasks for concurrent execution
+    let pacman_search = tokio::spawn(async move {
+        search_pacman(&term_pacman)
+    });
+    
+    let aur_search = tokio::spawn(async move {
+        search_aur(&term_aur)
+    });
+    
+    let flatpak_search = tokio::spawn(async move {
+        search_flatpak(&term_flatpak)
+    });
+
+    // Wait for all searches to complete
+    let results = join_all(vec![pacman_search, aur_search, flatpak_search]).await;
+    
+    // Unwrap the results, using empty vectors as fallback
+    let mut final_results = (Vec::new(), Vec::new(), Vec::new());
+    
+    if let Ok(Ok(pacman_results)) = results[0].as_ref() {
+        final_results.0 = pacman_results.clone();
+    }
+    if let Ok(Ok(aur_results)) = results[1].as_ref() {
+        final_results.1 = aur_results.clone();
+    }
+    if let Ok(Ok(flatpak_results)) = results[2].as_ref() {
+        final_results.2 = flatpak_results.clone();
+    }
+
+    final_results
 }
 
-fn search_pacman(term: &str) -> Vec<(String, String)> {
+fn search_pacman(term: &str) -> std::io::Result<Vec<(String, String)>> {
     execute_search_command("pacman", &["-Ss", term])
 }
 
-fn search_aur(term: &str) -> Vec<(String, String)> {
+fn search_aur(term: &str) -> std::io::Result<Vec<(String, String)>> {
     execute_search_command("yay", &["-Ss", "--aur", term])
 }
 
-fn search_flatpak(term: &str) -> Vec<(String, String)> {
+fn search_flatpak(term: &str) -> std::io::Result<Vec<(String, String)>> {
     let output = Command::new("flatpak")
         .args(&["search", term])
-        .output()
-        .expect("Failed to execute flatpak command");
+        .output()?;
 
-    String::from_utf8_lossy(&output.stdout)
+    Ok(String::from_utf8_lossy(&output.stdout)
         .lines()
         .skip(1)
         .filter(|line| !line.is_empty())
@@ -60,16 +93,15 @@ fn search_flatpak(term: &str) -> Vec<(String, String)> {
                 None
             }
         })
-        .collect()
+        .collect())
 }
 
-fn execute_search_command(command: &str, args: &[&str]) -> Vec<(String, String)> {
+fn execute_search_command(command: &str, args: &[&str]) -> std::io::Result<Vec<(String, String)>> {
     let output = Command::new(command)
         .args(args)
-        .output()
-        .unwrap_or_else(|_| panic!("Failed to execute {} command", command));
+        .output()?;
 
-    String::from_utf8_lossy(&output.stdout)
+    Ok(String::from_utf8_lossy(&output.stdout)
         .lines()
         .collect::<Vec<&str>>()
         .chunks(2)
@@ -95,7 +127,7 @@ fn execute_search_command(command: &str, args: &[&str]) -> Vec<(String, String)>
                 None
             }
         })
-        .collect()
+        .collect())
 }
 
 fn print_results_with_pager(results: &(Vec<(String, String)>, Vec<(String, String)>, Vec<(String, String)>)) {
