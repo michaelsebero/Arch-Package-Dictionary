@@ -3,9 +3,9 @@
 ```
 git clone https://github.com/michaelsebero/Arch-Package-Dictionary
 
-cd /home/user/Arch-Package-Dictionary/
+cd /home/user/Arch-Package-Dictionary/paru
 
-cargo run 
+cargo run
 ```
 
 <p align="middle">
