@@ -1,7 +1,7 @@
 ## How to Use
 
 ```
-git clone https://github.com/MichaelSebero/Arch-Package-Dictionary
+git clone https://github.com/Michael-Sebero/Arch-Package-Dictionary
 
 cd /home/user/Arch-Package-Dictionary/paru
 
